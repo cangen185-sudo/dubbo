@@ -20,10 +20,17 @@ import org.apache.dubbo.common.utils.ReflectUtils;
 import org.apache.dubbo.rpc.model.MethodDescriptor.RpcType;
 import org.apache.dubbo.rpc.support.DemoService;
 
+import java.lang.reflect.Method;
+import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
+import java.util.concurrent.CompletableFuture;
+import java.util.stream.Stream;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 class ReflectionMethodDescriptorTest {
 
@@ -70,6 +77,32 @@ class ReflectionMethodDescriptorTest {
     @Test
     void getReturnTypes() {
         Assertions.assertArrayEquals(new Type[] {String.class, String.class}, method.getReturnTypes());
+    }
+
+    @ParameterizedTest
+    @MethodSource("asyncReturnTypes")
+    void getAsyncReturnTypes(String methodName, Class<?> expectedClass) throws Exception {
+        Method javaMethod = AsyncService.class.getMethod(methodName);
+        ReflectionMethodDescriptor descriptor = new ReflectionMethodDescriptor(javaMethod);
+        Type payloadType = ((ParameterizedType) javaMethod.getGenericReturnType()).getActualTypeArguments()[0];
+        Assertions.assertArrayEquals(new Type[] {expectedClass, payloadType}, descriptor.getReturnTypes());
+        Assertions.assertEquals(CompletableFuture.class, descriptor.getReturnClass());
+        Assertions.assertEquals(RpcType.UNARY, descriptor.getRpcType());
+    }
+
+    static Stream<Arguments> asyncReturnTypes() {
+        return Stream.of(
+                Arguments.of("upperBoundWildcard", CharSequence.class),
+                Arguments.of("lowerBoundWildcard", Object.class),
+                Arguments.of("genericArray", Object[].class));
+    }
+
+    public interface AsyncService<T> {
+        CompletableFuture<? extends CharSequence> upperBoundWildcard();
+
+        CompletableFuture<? super String> lowerBoundWildcard();
+
+        CompletableFuture<T[]> genericArray();
     }
 
     @Test

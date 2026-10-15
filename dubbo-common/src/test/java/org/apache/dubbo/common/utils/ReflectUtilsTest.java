@@ -19,6 +19,7 @@ package org.apache.dubbo.common.utils;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -27,9 +28,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.stream.Stream;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
@@ -449,6 +454,61 @@ class ReflectUtilsTest {
         // default upper bound is Object
         Assertions.assertEquals("java.lang.Object", types6[0].getTypeName());
         Assertions.assertEquals("S", types6[1].getTypeName());
+    }
+
+    @ParameterizedTest
+    @MethodSource("asyncReturnTypes")
+    void testGetAsyncReturnTypes(String methodName, Class<?> expectedClass) throws Exception {
+        Method method = AsyncReturnTypes.class.getMethod(methodName);
+        Type payloadType = ((ParameterizedType) method.getGenericReturnType()).getActualTypeArguments()[0];
+        Assertions.assertArrayEquals(new Type[] {expectedClass, payloadType}, ReflectUtils.getReturnTypes(method));
+    }
+
+    static Stream<Arguments> asyncReturnTypes() {
+        return Stream.of(
+                Arguments.of("unboundedWildcard", Object.class),
+                Arguments.of("upperBoundWildcard", CharSequence.class),
+                Arguments.of("lowerBoundWildcard", Object.class),
+                Arguments.of("parameterizedWildcard", List.class),
+                Arguments.of("parameterizedBound", List.class),
+                Arguments.of("chainedBound", Number.class),
+                Arguments.of("boundedArray", Number[].class),
+                Arguments.of("unboundedArray", Object[].class),
+                Arguments.of("parameterizedArray", List[].class),
+                Arguments.of("multiDimensionalArray", List[][].class),
+                Arguments.of("boundedGenericArray", List[].class));
+    }
+
+    @Test
+    void testGetRawFutureReturnTypes() throws Exception {
+        Assertions.assertArrayEquals(
+                new Type[] {null, null}, ReflectUtils.getReturnTypes(AsyncReturnTypes.class.getMethod("rawFuture")));
+    }
+
+    public interface AsyncReturnTypes<T extends Number, U, P extends List<String>, V extends T> {
+        CompletableFuture<?> unboundedWildcard();
+
+        CompletableFuture<? extends CharSequence> upperBoundWildcard();
+
+        CompletableFuture<? super String> lowerBoundWildcard();
+
+        CompletableFuture<? extends List<String>> parameterizedWildcard();
+
+        CompletableFuture<P> parameterizedBound();
+
+        CompletableFuture<V> chainedBound();
+
+        CompletableFuture<T[]> boundedArray();
+
+        CompletableFuture<U[]> unboundedArray();
+
+        CompletableFuture<List<U>[]> parameterizedArray();
+
+        CompletableFuture<List<U>[][]> multiDimensionalArray();
+
+        CompletableFuture<P[]> boundedGenericArray();
+
+        CompletableFuture rawFuture();
     }
 
     public interface TypeClass<T extends String, S> {

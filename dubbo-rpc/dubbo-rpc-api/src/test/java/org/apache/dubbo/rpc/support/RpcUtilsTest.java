@@ -24,16 +24,21 @@ import org.apache.dubbo.rpc.RpcInvocation;
 import org.apache.dubbo.rpc.model.ApplicationModel;
 import org.apache.dubbo.rpc.model.ModuleServiceRepository;
 
+import java.lang.reflect.Method;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.stream.Stream;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import static org.apache.dubbo.common.constants.CommonConstants.$INVOKE;
 import static org.apache.dubbo.rpc.Constants.AUTO_ATTACH_INVOCATIONID_KEY;
@@ -232,6 +237,40 @@ class RpcUtilsTest {
                 demoServiceClass.getMethod("testReturnType5", String.class).getGenericReturnType();
         Assertions.assertEquals(((ParameterizedType) genericReturnType5).getActualTypeArguments()[0], types5[1]);
         Assertions.assertArrayEquals(types5, inv5.getReturnTypes());
+    }
+
+    @ParameterizedTest
+    @MethodSource("asyncReturnTypes")
+    void testGetAsyncReturnTypes(String methodName, Class<?> expectedClass, boolean useCache) throws Exception {
+        String serviceName = AsyncService.class.getName();
+        Invoker invoker = createMockInvoker(URL.valueOf("test://127.0.0.1:1/" + serviceName));
+        RpcInvocation invocation =
+                new RpcInvocation(methodName, serviceName, "", new Class<?>[0], new Object[0], null, invoker, null);
+        Assertions.assertNotNull(invocation.getReturnTypes());
+        if (!useCache) {
+            invocation.setReturnTypes(null);
+        }
+        Method javaMethod = AsyncService.class.getMethod(methodName);
+        Type payloadType = ((ParameterizedType) javaMethod.getGenericReturnType()).getActualTypeArguments()[0];
+        Assertions.assertArrayEquals(new Type[] {expectedClass, payloadType}, RpcUtils.getReturnTypes(invocation));
+    }
+
+    static Stream<Arguments> asyncReturnTypes() {
+        return Stream.of(
+                Arguments.of("upperBoundWildcard", CharSequence.class, true),
+                Arguments.of("upperBoundWildcard", CharSequence.class, false),
+                Arguments.of("lowerBoundWildcard", Object.class, true),
+                Arguments.of("lowerBoundWildcard", Object.class, false),
+                Arguments.of("genericArray", Object[].class, true),
+                Arguments.of("genericArray", Object[].class, false));
+    }
+
+    public interface AsyncService<T> {
+        CompletableFuture<? extends CharSequence> upperBoundWildcard();
+
+        CompletableFuture<? super String> lowerBoundWildcard();
+
+        CompletableFuture<T[]> genericArray();
     }
 
     @Test

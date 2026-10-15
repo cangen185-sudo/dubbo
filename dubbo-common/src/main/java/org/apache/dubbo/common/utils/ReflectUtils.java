@@ -28,6 +28,7 @@ import java.lang.reflect.Modifier;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.lang.reflect.TypeVariable;
+import java.lang.reflect.WildcardType;
 import java.net.URL;
 import java.security.CodeSource;
 import java.security.ProtectionDomain;
@@ -1178,22 +1179,29 @@ public final class ReflectUtils {
         if (Future.class.isAssignableFrom(returnType)) {
             if (genericReturnType instanceof ParameterizedType) {
                 Type actualArgType = ((ParameterizedType) genericReturnType).getActualTypeArguments()[0];
-                if (actualArgType instanceof ParameterizedType) {
-                    returnType = (Class<?>) ((ParameterizedType) actualArgType).getRawType();
-                    genericReturnType = actualArgType;
-                } else if (actualArgType instanceof TypeVariable) {
-                    returnType = (Class<?>) ((TypeVariable<?>) actualArgType).getBounds()[0];
-                    genericReturnType = actualArgType;
-                } else {
-                    returnType = (Class<?>) actualArgType;
-                    genericReturnType = returnType;
-                }
+                returnType = getRawClass(actualArgType);
+                genericReturnType = actualArgType;
             } else {
                 returnType = null;
                 genericReturnType = null;
             }
         }
         return new Type[] {returnType, genericReturnType};
+    }
+
+    private static Class<?> getRawClass(Type type) {
+        if (type instanceof ParameterizedType) {
+            return (Class<?>) ((ParameterizedType) type).getRawType();
+        } else if (type instanceof TypeVariable) {
+            return getRawClass(((TypeVariable<?>) type).getBounds()[0]);
+        } else if (type instanceof WildcardType) {
+            return getRawClass(((WildcardType) type).getUpperBounds()[0]);
+        } else if (type instanceof GenericArrayType) {
+            return Array.newInstance(getRawClass(((GenericArrayType) type).getGenericComponentType()), 0)
+                    .getClass();
+        } else {
+            return (Class<?>) type;
+        }
     }
 
     /**
